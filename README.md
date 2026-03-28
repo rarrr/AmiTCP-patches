@@ -1,6 +1,6 @@
 # AmiTCP Patches for VBCC
 
-This repository contains patches to make [AmiTCP](https://github.com/mheeres/AmiTCP) compile with the VBCC compiler and run optimally on Amiga systems.
+This repository contains patches to make AmiTCP compile with the VBCC compiler and some optimisations.
 
 ## Patches
 
