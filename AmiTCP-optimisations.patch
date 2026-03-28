@@ -1,0 +1,146 @@
+--- a/src/amitcp/api/amiga_generic.c
++++ b/src/amitcp/api/amiga_generic.c
+@@ -119,21 +119,19 @@
+ }
+ 
+ /*
+- * ffs() copied directly from bsdss/server/kern/subr_xxx.c
+- */
+-static inline int ffs(register long mask)
+-{
+-  register int bit;
+-
+-  if (!mask)
+-    return(0);
+-  for (bit = 1;; ++bit) {
+-    if (mask&0x01)
+-      return(bit);
+-    mask >>= 1;
++   * ffs() optimized to O(log N) binary search for WaitSelect() hot path
++   */
++  static inline int ffs(register long mask)
++  {
++    if (!mask) return 0;
++    register int bit = 1;
++    if (!(mask & 0xffff)) { bit += 16; mask >>= 16; }
++    if (!(mask & 0x00ff)) { bit += 8;  mask >>= 8;  }
++    if (!(mask & 0x000f)) { bit += 4;  mask >>= 4;  }
++    if (!(mask & 0x0003)) { bit += 2;  mask >>= 2;  }
++    if (!(mask & 0x0001)) { bit += 1; }
++    return bit;
+   }
+-  /* NOT REACHED */
+-}
+ 
+ 
+ /*
+--- a/src/amitcp/kern/uipc_mbuf.c
++++ b/src/amitcp/kern/uipc_mbuf.c
+@@ -338,7 +338,7 @@
+   struct memHeader *mh;
+   ULONG  size;
+ 
+-  size = MSIZE * (howmany + 1) + sizeof(struct memHeader);
++  size = MSIZE * howmany + sizeof(struct memHeader) + MSIZE - 1;
+ 
+   /*
+    * check if allowed to allocate more
+@@ -367,13 +367,10 @@
+   mh++;                         /* pass by the memHeader */
+ 
+   /*
+-   * update the statistics
+-   */
+-  mbstat.m_mbufs += howmany;
+-
+-  /*
+    * link mbufs into the free list
+    */
+   m = dtom(((caddr_t)mh) + MSIZE - 1); /* correctly aligned mbuf pointer */
++  howmany = (size - ((caddr_t)m - (caddr_t)mbufmem)) / MSIZE;
++  mbstat.m_mbufs += howmany;
+   while(howmany--) {
+     m->m_next = mfree;
+@@ -537,12 +534,20 @@
+ 	register struct mbuf *m;
+ {
+ 	register struct mbuf *n;
++	spl_t ms;
+ 
+ 	if (m == NULL)
+ 		return;
++	ms = splimp();
+ 	do {
+-		MFREE(m, n);
++		mbstat.m_mtypes[m->m_type]--;
++		if (m->m_flags & M_EXT) {
++			MCLFREE(m->m_ext.ext_buf);
++		}
++		n = m->m_next;
++		m->m_next = mfree; mfree = m;
+ 	} while (m = n);
++	splx(ms);
+ }
+ 
+ /*
+--- a/src/amitcp/kern/kern_malloc.c
++++ b/src/amitcp/kern/kern_malloc.c
+@@ -88,11 +88,7 @@
+   register void *mem;
+ 
+   extern void *malloc(size_t);
+-  extern struct SignalSemaphore malloc_semaphore; 
+-
+-  ObtainSemaphore(&malloc_semaphore);
+   mem = malloc((size_t)size);
+-  ReleaseSemaphore(&malloc_semaphore);
+ 
+   return mem;
+ }
+@@ -101,11 +97,7 @@
+ bsd_free(void *addr, int type)
+ {
+   extern void free(void *);
+-  extern struct SignalSemaphore malloc_semaphore; 
+-
+-  ObtainSemaphore(&malloc_semaphore);
+   free(addr);
+-  ReleaseSemaphore(&malloc_semaphore);
+ }
+ 
+ /*
+@@ -117,11 +109,7 @@
+ bsd_realloc(void * mem, unsigned long size, int type, int flags)
+ {
+   extern void *realloc(void *, size_t);
+-  extern struct SignalSemaphore malloc_semaphore; 
+-
+-  ObtainSemaphore(&malloc_semaphore);
+   mem = realloc(mem, (size_t)size);
+-  ReleaseSemaphore(&malloc_semaphore);
+ 
+   return mem;
+ }
+--- a/src/amitcp/kern/amiga_main.c
++++ b/src/amitcp/kern/amiga_main.c
+@@ -211,7 +211,8 @@
+ 	    sig &= ~timermask;
+ 	}
+ 
+-	sig |= SetSignal(0L, sigmask) & sigmask;
++	if (!sig)
++	  sig |= SetSignal(0L, sigmask) & sigmask;
+       } while (sig && sig != breakmask);
+ 
+       if (sig & breakmask) {
+--- a/src/amitcp/net/if_sana.c
++++ b/src/amitcp/net/if_sana.c
+@@ -101,7 +101,7 @@
+ 
+ #define ARP_MTU (sizeof(struct s2_arppkt))
+ 
+-int debug_sana = 1;
++int debug_sana = 0;
+ 
+ /* Global port for all SANA-II network interfaces */
+ struct MsgPort *SanaPort = NULL;

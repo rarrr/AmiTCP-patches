@@ -1,0 +1,1117 @@
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/GCCOPTS AmiTCP-3.0b2/src/amitcp/GCCOPTS
+--- AmiTCP-3.0b2.orig/src/amitcp/GCCOPTS	2026-03-24 13:21:51.501608100 +1100
++++ AmiTCP-3.0b2/src/amitcp/GCCOPTS	2026-03-24 13:22:43.324977700 +1100
+@@ -20,7 +20,9 @@
+ -I.
+ -Iconf
+ -Iprotos
+--I/p/projects/amiga-gcc/amigados/include
++-I/opt/amiga/m68k-amigaos/sys-include
+ # For RCS macros...
+ -include conf/rcs.h
+ -finline  -O
++-I/opt/amiga/lib/gcc/m68k-amigaos/6.5.0b/include
++-I/opt/amiga/m68k-amigaos/ndk-include
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/GNUmakefile AmiTCP-3.0b2/src/amitcp/GNUmakefile
+--- AmiTCP-3.0b2.orig/src/amitcp/GNUmakefile	2026-03-24 13:21:46.300945600 +1100
++++ AmiTCP-3.0b2/src/amitcp/GNUmakefile	2026-03-24 13:22:43.417370500 +1100
+@@ -100,8 +100,8 @@
+ #
+ #
+ 
+-BINDIR= /p/projects/amiga-gcc/bin
+-CC= $(BINDIR)/gcc-amigados
++BINDIR= /opt/amiga/bin
++CC= $(BINDIR)/m68k-amigaos-gcc
+ AS= $(BINDIR)/gas
+ LD= $(CC)
+ #LD= $(BINDIR)/ld
+@@ -112,8 +112,8 @@
+ MAKE = gmake
+ MAKEFILE = GNUmakefile
+ GCCOPTIONS= GCCOPTS
+-CFLAGS= `egrep -v '^\#' $(GCCOPTIONS)`
+-CFLAGS_NO_OPT = `egrep -v '(^\#)|(-finline)|(-O)' $(GCCOPTIONS)` 
++CFLAGS= `/usr/bin/grep -E -v '^\#' $(GCCOPTIONS)`
++CFLAGS_NO_OPT = `/usr/bin/grep -E -v '(^\#)|(-finline)|(-O)' $(GCCOPTIONS)` 
+ 
+ DIST_AMI = $(DIST)/amitcp
+ 
+@@ -312,7 +312,7 @@
+ RELEASE: $(AMISRC)
+ 	for F in $(AMISRC) ; do \
+ 	  rlog -R $$F && { \
+-	    if ident -q $$F | egrep -v '\$$Log' | fgrep '$$' >/dev/null ; \
++	    if ident -q $$F | /usr/bin/grep -E -v '\$$Log' | fgrep '$$' >/dev/null ; \
+ 	      then rcs -q '-N$(RELEASE):$$' $$F ; \
+ 	      else rcs -q '-N$(RELEASE):' $$F ;\
+ 	    fi ; \
+@@ -326,7 +326,7 @@
+ 
+ # Test for RCS locks
+ locks: 
+-	@egrep '^locks\
++	@/usr/bin/grep -E '^locks\
+ 	[a-z]+' \
+ 	`echo $(CSRCS) $(SYS_H) $(API_H) $(KERN_H) $(NET_H) $(NETINET_H) $(MISC) \
+ 	| tr -cs "[!-~]" "[\012*]" | sed 's-[^/]*$$-RCS/&,v-g' `
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/amiga_api.c AmiTCP-3.0b2/src/amitcp/api/amiga_api.c
+--- AmiTCP-3.0b2.orig/src/amitcp/api/amiga_api.c	2026-03-24 13:22:01.475049100 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/amiga_api.c	2026-03-24 13:22:34.048175300 +1100
+@@ -86,9 +86,11 @@
+ #include <kern/amiga_subr.h>
+ #include <kern/amiga_log.h>
+ 
++#ifndef __VBCC__
+ #if sizeof (fd_mask) != 4 || sizeof (long) != 4
+ #error AmiTCP/IP currently depends on fd_mask and longword size of 32 bits.
+ #endif
++#endif
+ 
+ #define SOCLIBNAME "bsdsocket.library\0\0" /* space for ".n" at the end */
+ 
+@@ -126,8 +128,13 @@
+  * OFFSET needed to be casted LONG so compiler doesn't give warning
+  * about casting pointer to UWORD
+  */
++#ifdef __VBCC__
++#include <stddef.h>
++#define OFFSET(structName, structEntry) (offsetof(struct structName, structEntry))
++#else
+ #define OFFSET(structName, structEntry) \
+   ((LONG)(&(((struct structName *) 0)->structEntry)))
++#endif
+ 
+ /*
+  * original initTable of only UWORD items doesn't work, since compiler
+@@ -182,7 +189,7 @@
+ BOOL SB_Expunged = FALSE; /* boolean value set by ELL_Expunge */
+ 
+ 
+-struct Library * SAVEDS RAF2(ELL_Open,
++SAVEDS struct Library * RAF2(ELL_Open,
+ 			     struct Library *,	libPtr,		a6,
+ 			     ULONG,		version,	d0)
+ #if 0
+@@ -211,7 +218,7 @@
+ 					     (UWORD *)&Library_initTable,
+ 					     NULL,
+ 					     sizeof(struct SocketBase),
+-					     NULL);
++					     0);
+   if (newBase == NULL)
+     return NULL;
+ 
+@@ -300,6 +307,9 @@
+ #elif __SASC
+     extern ULONG* REGARGFUN UL_Close(register __a6 struct SocketBase *);
+     UL_Close(newBase);
++#elif __VBCC__
++    extern ULONG* UL_Close(__reg("a6") struct SocketBase *);
++    UL_Close(newBase);
+ #else 
+ #error Compiler not supported!
+ #endif
+@@ -308,7 +318,7 @@
+ }
+ 
+ 
+-ULONG * SAVEDS RAF1(ELL_Expunge,
++SAVEDS ULONG * RAF1(ELL_Expunge,
+ 		    struct Library *,	libPtr, a6)
+ #if 0
+ {
+@@ -356,7 +366,7 @@
+ }
+ 
+ 
+-ULONG * SAVEDS RAF1(UL_Close,
++SAVEDS ULONG * RAF1(UL_Close,
+ 	  struct SocketBase *,	libPtr, a6)
+ #if 0
+ {
+@@ -429,6 +439,8 @@
+     return ELL_Expunge();
+ #elif __SASC
+     return ELL_Expunge(MasterSocketBase);
++#elif __VBCC__
++    { extern ULONG* ELL_Expunge(__reg("a6") struct Library *); return ELL_Expunge(MasterSocketBase); }
+ #else 
+ #error Compiler not supported!
+ #endif
+@@ -451,7 +463,7 @@
+ 				 (UWORD *)&Library_initTable,
+ 				 NULL,
+ 				 sizeof(struct Library),
+-				 NULL);
++				 0);
+   if (MasterSocketBase == NULL)
+     return FALSE;
+ 
+@@ -578,6 +590,8 @@
+     ELL_Expunge();
+ #elif __SASC
+     ELL_Expunge(MasterSocketBase);
++#elif __VBCC__
++    { extern ULONG* ELL_Expunge(__reg("a6") struct Library *); ELL_Expunge(MasterSocketBase); }
+ #else 
+ #error Compiler not supported!
+ #endif
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/amiga_libcalls.c AmiTCP-3.0b2/src/amitcp/api/amiga_libcalls.c
+--- AmiTCP-3.0b2.orig/src/amitcp/api/amiga_libcalls.c	2026-03-24 13:22:03.341715100 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/amiga_libcalls.c	2026-03-24 13:22:35.565001800 +1100
+@@ -113,6 +113,10 @@
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/socketvar.h>
++#ifndef isascii
++#define isascii(c) (((unsigned)(c))<=0x7f)
++#endif
++
+ #include <sys/kernel.h>
+ #include <sys/ioctl.h>
+ #include <sys/protosw.h>
+@@ -140,7 +144,7 @@
+  * Convert network-format internet address
+  * to base 256 d.d.d.d representation.
+  */
+-char *SAVEDS RAF2(_Inet_NtoA,
++SAVEDS char * RAF2(_Inet_NtoA,
+ 		 struct SocketBase *,	libPtr,	a6,
+ 		 ULONG,			s_addr,	d0)
+ #if 0
+@@ -395,3 +399,11 @@
+ 	return (val);
+ }
+ 
++
++int stricmp(const char *s1, const char *s2) {
++  while (*s1 && (tolower(*(unsigned char *)s1) == tolower(*(unsigned char *)s2))) {
++    s1++;
++    s2++;
++  }
++  return tolower(*(unsigned char *)s1) - tolower(*(unsigned char *)s2);
++}
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/amiga_raf.h AmiTCP-3.0b2/src/amitcp/api/amiga_raf.h
+--- AmiTCP-3.0b2.orig/src/amitcp/api/amiga_raf.h	2026-03-24 13:22:03.703033200 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/amiga_raf.h	2026-03-24 13:22:36.519371300 +1100
+@@ -158,6 +158,57 @@
+   register type7 reg7 __asm(#reg7); \
+   type7 arg7 = reg7;                     	
+ 
+-#endif /* __SASC | __GNUC__ */
++#elif __VBCC__
++
++#define RAF1(funname, type1, arg1, reg1) \
++  funname(__reg(#reg1) type1 arg1) \
++{
++
++#define RAF2(funname, type1, arg1, reg1, type2, arg2, reg2) \
++  funname(__reg(#reg1) type1 arg1, \
++	  __reg(#reg2) type2 arg2) \
++{
++
++#define RAF3(funname, type1, arg1, reg1, type2, arg2, reg2, type3, arg3, reg3) \
++  funname(__reg(#reg1) type1 arg1, \
++	  __reg(#reg2) type2 arg2, \
++	  __reg(#reg3) type3 arg3) \
++{
++
++#define RAF4(funname, type1, arg1, reg1, type2, arg2, reg2, type3, arg3, reg3, type4, arg4, reg4) \
++  funname(__reg(#reg1) type1 arg1, \
++	  __reg(#reg2) type2 arg2, \
++	  __reg(#reg3) type3 arg3, \
++	  __reg(#reg4) type4 arg4) \
++{
++
++#define RAF5(funname, type1, arg1, reg1, type2, arg2, reg2, type3, arg3, reg3, type4, arg4, reg4, type5, arg5, reg5) \
++  funname(__reg(#reg1) type1 arg1, \
++	  __reg(#reg2) type2 arg2, \
++	  __reg(#reg3) type3 arg3, \
++	  __reg(#reg4) type4 arg4, \
++	  __reg(#reg5) type5 arg5) \
++{
++
++#define RAF6(funname, type1, arg1, reg1, type2, arg2, reg2, type3, arg3, reg3, type4, arg4, reg4, type5, arg5, reg5, type6, arg6, reg6) \
++  funname(__reg(#reg1) type1 arg1, \
++	  __reg(#reg2) type2 arg2, \
++	  __reg(#reg3) type3 arg3, \
++	  __reg(#reg4) type4 arg4, \
++	  __reg(#reg5) type5 arg5, \
++	  __reg(#reg6) type6 arg6) \
++{
++
++#define RAF7(funname, type1, arg1, reg1, type2, arg2, reg2, type3, arg3, reg3, type4, arg4, reg4, type5, arg5, reg5, type6, arg6, reg6, type7, arg7, reg7) \
++  funname(__reg(#reg1) type1 arg1, \
++	  __reg(#reg2) type2 arg2, \
++	  __reg(#reg3) type3 arg3, \
++	  __reg(#reg4) type4 arg4, \
++	  __reg(#reg5) type5 arg5, \
++	  __reg(#reg6) type6 arg6, \
++	  __reg(#reg7) type7 arg7) \
++{
++
++#endif /* __SASC | __GNUC__ | __VBCC__ */
+ 
+ #endif /* !defined(AMIGA_RAF_H) */
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/amiga_syscalls.c AmiTCP-3.0b2/src/amitcp/api/amiga_syscalls.c
+--- AmiTCP-3.0b2.orig/src/amitcp/api/amiga_syscalls.c	2026-03-24 13:22:04.056328200 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/amiga_syscalls.c	2026-03-24 13:22:36.770342300 +1100
+@@ -49,7 +49,7 @@
+ 
+ #include <api/amiga_api.h>
+ #include <api/amiga_libcallentry.h>
+-#include <sockargs.h>
++#include <api/sockargs.h>
+ 
+ #include <amitcp/socketbasetags.h>
+ 
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/apicalls.h AmiTCP-3.0b2/src/amitcp/api/apicalls.h
+--- AmiTCP-3.0b2.orig/src/amitcp/api/apicalls.h	2026-03-24 13:22:04.237429300 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/apicalls.h	2026-03-24 13:22:36.933968100 +1100
+@@ -23,12 +23,18 @@
+ #ifndef API_APICALLS_H
+ #define API_APICALLS_H
+ 
++#if __VBCC__
++typedef VOID (* f_void)();
++#else
+ typedef VOID (* REGARGFUN f_void)(...);
++#endif
+ 
+ #if __SASC
+ #include <api/apicalls_sasc.h>
+ #elif __GNUC__
+ #include <api/apicalls_gnuc.h>
++#elif __VBCC__
++#include <api/apicalls_vbcc.h>
+ #else
+ #error AmiTCP/IP internal API calls are not defined for your compiler!
+ #endif
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/apicalls_vbcc.h AmiTCP-3.0b2/src/amitcp/api/apicalls_vbcc.h
+--- AmiTCP-3.0b2.orig/src/amitcp/api/apicalls_vbcc.h	1970-01-01 10:00:00.000000000 +1000
++++ AmiTCP-3.0b2/src/amitcp/api/apicalls_vbcc.h	2026-03-24 13:22:37.424628700 +1100
+@@ -0,0 +1,155 @@
++/*
++ * apicalls_vbcc.h - AmiTCP/IP internal API call stubs for VBCC
++ *
++ * Equivalent of apicalls_sasc.h, using VBCC __reg() register convention
++ * instead of SAS/C "register __reg" syntax.
++ */
++
++#ifndef API_APICALLS_VBCC_H
++#define API_APICALLS_VBCC_H
++
++#ifndef API_APICALLS_H
++#error include <api/apicalls.h> instead of <api/apicalls_vbcc.h>
++#endif
++
++#ifndef EXEC_TYPES_H
++#include <exec/types.h>
++#endif
++
++#ifndef SYS_TYPES_H
++#include <sys/types.h>
++#endif
++
++#ifndef SYS_TIME_H
++#include <sys/time.h>
++#endif
++
++#include <stdarg.h>
++
++extern LONG _CloseSocket(__reg("a6") struct SocketBase *,
++                         __reg("d0") LONG);
++
++extern LONG _connect(__reg("a6") struct SocketBase *,
++                     __reg("d0") LONG,
++                     __reg("a0") struct sockaddr *,
++                     __reg("d1") LONG);
++
++extern LONG _recv(__reg("a6") struct SocketBase *,
++                  __reg("d0") LONG,
++                  __reg("a0") char *,
++                  __reg("d1") LONG,
++                  __reg("d2") LONG);
++
++extern LONG _send(__reg("a6") struct SocketBase *,
++                  __reg("d0") LONG,
++                  __reg("a0") char *,
++                  __reg("d1") LONG,
++                  __reg("d2") LONG);
++
++extern LONG _sendto(__reg("a6") struct SocketBase *,
++                    __reg("d0") LONG,
++                    __reg("a0") char *,
++                    __reg("d1") LONG,
++                    __reg("d2") LONG,
++                    __reg("a1") struct sockaddr *,
++                    __reg("d3") LONG);
++
++extern LONG _socket(__reg("a6") struct SocketBase *,
++                    __reg("d0") LONG,
++                    __reg("d1") LONG,
++                    __reg("d2") LONG);
++
++extern LONG _WaitSelect(__reg("a6") struct SocketBase *,
++                        __reg("d0") ULONG,
++                        __reg("a0") fd_set *,
++                        __reg("a1") fd_set *,
++                        __reg("a2") fd_set *,
++                        __reg("a3") struct timeval *,
++                        __reg("d1") ULONG *);
++
++extern struct hostent * _gethostbyaddr(__reg("a6") struct SocketBase *,
++                                       __reg("a0") const UBYTE *,
++                                       __reg("d0") int,
++                                       __reg("d1") int);
++
++extern LONG _gethostname(__reg("a6") struct SocketBase *,
++                         __reg("a0") STRPTR,
++                         __reg("d0") LONG);
++
++extern LONG _SetErrnoPtr(__reg("a6") struct SocketBase *,
++                         __reg("a0") VOID *,
++                         __reg("d0") UBYTE);
++
++#define BASE_EXT_DECL
++#define BASE_PAR_DECL  struct SocketBase * SocketBase,
++#define BASE_PAR_DECL0 struct SocketBase * SocketBase
++#define BASE_NAME SocketBase
++
++static LONG
++CloseSocket (BASE_PAR_DECL LONG d)
++{
++  return _CloseSocket(SocketBase, d);
++}
++
++static LONG
++connect (BASE_PAR_DECL LONG s, struct sockaddr * name, LONG namelen)
++{
++  return _connect(SocketBase, s, name, namelen);
++}
++
++static LONG
++recv (BASE_PAR_DECL LONG s, char * buf, LONG len, LONG flags)
++{
++  return _recv(SocketBase, s, buf, len, flags);
++}
++
++static LONG
++send (BASE_PAR_DECL LONG s, char * msg, LONG len, LONG flags)
++{
++  return _send(SocketBase, s, msg, len, flags);
++}
++
++static LONG
++sendto (BASE_PAR_DECL LONG s, char * msg, LONG len, LONG flags,
++        struct sockaddr * to, LONG tolen)
++{
++  return _sendto(SocketBase, s, msg, len, flags, to, tolen);
++}
++
++static LONG
++socket (BASE_PAR_DECL LONG domain, LONG type, LONG protocol)
++{
++  return _socket(SocketBase, domain, type, protocol);
++}
++
++static LONG
++WaitSelect (BASE_PAR_DECL LONG nfds, fd_set * readfds, fd_set * writefds,
++            fd_set * exceptfds, struct timeval * timeout, ULONG * maskp)
++{
++  return _WaitSelect(SocketBase, nfds, readfds, writefds, exceptfds, timeout, maskp);
++}
++
++static struct hostent *
++gethostbyaddr (BASE_PAR_DECL const UBYTE * addr, int len, int type)
++{
++  return _gethostbyaddr(SocketBase, addr, len, type);
++}
++
++static LONG
++gethostname (BASE_PAR_DECL STRPTR name, LONG namelen)
++{
++  return _gethostname(SocketBase, name, namelen);
++}
++
++static LONG
++SetErrnoPtr (BASE_PAR_DECL VOID * err_p, UBYTE size)
++{
++  return _SetErrnoPtr(SocketBase, err_p, size);
++}
++
++#undef BASE_EXT_DECL
++#undef BASE_PAR_DECL
++#undef BASE_PAR_DECL0
++#undef BASE_NAME
++
++#endif /* API_APICALLS_VBCC_H */
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/auto_protocols.c AmiTCP-3.0b2/src/amitcp/api/auto_protocols.c
+--- AmiTCP-3.0b2.orig/src/amitcp/api/auto_protocols.c	2026-03-24 13:22:07.240427200 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/auto_protocols.c	2026-03-24 13:22:39.519189600 +1100
+@@ -1,3 +1,4 @@
++#if 0
+ 
+ /****** protocols/arp *******************************************************
+ *
+@@ -829,3 +830,4 @@
+ *****************************************************************************
+ *
+ */
++#endif
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/gethostnamadr.c AmiTCP-3.0b2/src/amitcp/api/gethostnamadr.c
+--- AmiTCP-3.0b2.orig/src/amitcp/api/gethostnamadr.c	2026-03-24 13:22:07.845784400 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/gethostnamadr.c	2026-03-24 13:22:39.787076000 +1100
+@@ -379,7 +379,7 @@
+   }
+ }
+ 
+-struct hostent * SAVEDS RAF2 (_gethostbyname,
++SAVEDS struct hostent * RAF2 (_gethostbyname,
+ 			      struct SocketBase *,	libPtr,	a6,
+ 			      const char *,		name,	a0)
+ #if 0
+@@ -467,7 +467,7 @@
+   
+ }
+ 
+-struct hostent * SAVEDS RAF4 (_gethostbyaddr,
++SAVEDS struct hostent * RAF4 (_gethostbyaddr,
+ 			      struct SocketBase *,	libPtr,	a6,
+ 			      const UBYTE *,		addr,	a0,
+ 			      int,			len,	d0,
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/api/getxbyy.c AmiTCP-3.0b2/src/amitcp/api/getxbyy.c
+--- AmiTCP-3.0b2.orig/src/amitcp/api/getxbyy.c	2026-03-24 13:22:09.457437800 +1100
++++ AmiTCP-3.0b2/src/amitcp/api/getxbyy.c	2026-03-24 13:22:40.065752600 +1100
+@@ -237,7 +237,7 @@
+ }  
+ 
+ 
+-struct netent * SAVEDS RAF2(_getnetbyname,
++SAVEDS struct netent * RAF2(_getnetbyname,
+ 		     struct SocketBase *,	libPtr,	a6,
+ 		     const char *,		name,	a0)
+ #if 0
+@@ -263,7 +263,7 @@
+   return NULL;
+ }
+ 
+-struct netent * SAVEDS RAF3(_getnetbyaddr,
++SAVEDS struct netent * RAF3(_getnetbyaddr,
+ 		     struct SocketBase *,	libPtr,	a6,
+ 		     long,			netw,	d0,
+ 		     long,			type,	d1)
+@@ -346,7 +346,7 @@
+   
+ 
+ 
+-struct servent * SAVEDS RAF3(_getservbyname,
++SAVEDS struct servent * RAF3(_getservbyname,
+ 		     struct SocketBase *,	libPtr,	a6,
+ 		     const char *,		name,	a0,
+ 		     const char *,		proto,	a1)
+@@ -369,7 +369,7 @@
+   return NULL;
+ }
+ 
+-struct servent * SAVEDS RAF3(_getservbyport,
++SAVEDS struct servent * RAF3(_getservbyport,
+ 		     struct SocketBase *,	libPtr,	a6,
+ 		     LONG,			port,	d0,
+ 		     const char *,		proto,	a0)
+@@ -430,7 +430,7 @@
+ #undef PROTOENT
+ }  
+ 
+-struct protoent * SAVEDS RAF2(_getprotobyname,
++SAVEDS struct protoent * RAF2(_getprotobyname,
+ 		       struct SocketBase *,	libPtr,	a6,
+ 		       const char *,		name,	a0)
+ #if 0
+@@ -456,7 +456,7 @@
+   return NULL;
+ }
+ 
+-struct protoent * SAVEDS RAF2(_getprotobynumber,
++SAVEDS struct protoent * RAF2(_getprotobynumber,
+ 		       struct SocketBase *,	libPtr,	a6,
+ 		       long,			protoc,	a0)
+ #if 0
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_config.c AmiTCP-3.0b2/src/amitcp/kern/amiga_config.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_config.c	2026-03-24 13:21:36.963917800 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/amiga_config.c	2026-03-24 13:22:43.766593900 +1100
+@@ -96,7 +96,7 @@
+ #include <utility/tagitem.h>
+ #include <dos/rdargs.h>
+ 
+-#if __SASC
++#if __SASC || __VBCC__
+ #include <proto/dos.h>
+ #elif __GNUC__
+ #include <inline/dos.h>
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_cstat.c AmiTCP-3.0b2/src/amitcp/kern/amiga_cstat.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_cstat.c	2026-03-24 13:21:37.275920100 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/amiga_cstat.c	2026-03-24 13:22:44.477543800 +1100
+@@ -70,7 +70,7 @@
+ 
+ #include <dos/rdargs.h>
+ 
+-#if __SASC
++#if __SASC || __VBCC__
+ #include <proto/dos.h>
+ #elif __GNUC__
+ #include <inline/dos.h>
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_includes.h AmiTCP-3.0b2/src/amitcp/kern/amiga_includes.h
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_includes.h	2026-03-24 13:21:37.792715100 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/amiga_includes.h	2026-03-24 13:22:44.820277000 +1100
+@@ -125,6 +125,27 @@
+ #ifndef _STRING_H
+ #include <string.h>
+ #endif
++#elif __VBCC__
++/*
++ * VBCC: Do NOT include string.h — it conflicts with the static inline
++ * strcpy/strlen defined in the #else branch of amiga_subr.h.
++ * Define size_t manually, then pull in Exec/DOS prototypes.
++ */
++#ifndef __SIZE_T
++#define __SIZE_T
++typedef unsigned long size_t;
++#endif
++
++#ifndef NULL
++#define NULL 0
++#endif
++
++#ifndef PROTO_EXEC_H
++#include <proto/exec.h>
++#endif
++#ifndef PROTO_DOS_H
++#include <proto/dos.h>
++#endif
+ #elif __GNUC__
+ /* There is also built in functions in GNUC
+  * -- however, we do not use them just now.
+@@ -169,6 +190,11 @@
+ #define BASE_NAME (struct Device *)TimerBase
+ #include <inline/timer.h>
+ #endif
++/* NDK inline/timer.h uses TIMER_BASE_NAME (=TimerBase) directly in each
++ * macro; it does not expand BASE_EXT_DECL to declare it.  Provide a global
++ * extern so every file that includes amiga_includes.h can call GetSysTime
++ * (and other timer.device inlines) without a separate declaration. */
++extern struct Library *TimerBase;
+ 
+ static inline VOID  
+ BeginIO(register struct IORequest *ioRequest)
+@@ -209,6 +235,28 @@
+   SysBase->TDNestCnt++;
+ }
+ 
++#elif __VBCC__
++/*
++ * VBCC: proto/exec.h (included above) provides Exec inlines (Forbid, Remove,
++ * AbortIO, etc.) via inline/exec_protos.h.  We add timer and define BeginIO
++ * here using VBCC inline-asm syntax so none of the macro conflicts from
++ * proto/alib.h (which also defines NewList) are triggered.
++ * proto/timer.h declares TimerBase as extern struct Device * — do not
++ * redeclare it here with a different type.
++ */
++#ifndef PROTO_TIMER_H
++#include <proto/timer.h>
++#endif
++
++/* BeginIO — not in proto/exec.h; implement via direct device table call */
++static VOID __amitcp_BeginIO_impl(__reg("a6") struct Device *,
++                                  __reg("a1") struct IORequest *) =
++    "\tjsr\t-30(a6)";
++static void BeginIO(struct IORequest *ioRequest)
++{
++    __amitcp_BeginIO_impl(ioRequest->io_Device, ioRequest);
++}
++
+ #elif __SASC
+ 
+ #ifndef CLIB_EXEC_PROTOS_H
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_log.c AmiTCP-3.0b2/src/amitcp/kern/amiga_log.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_log.c	2026-03-24 13:21:39.147491400 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/amiga_log.c	2026-03-24 13:22:45.561580300 +1100
+@@ -160,7 +160,7 @@
+ #include <kern/amiga_rexx.h>
+ #include <utility/date.h>
+ 
+-#if __SASC 
++#if __SASC || __VBCC__
+ #include <proto/dos.h>
+ #include <proto/utility.h>
+ #elif __GNUC__
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_main.c AmiTCP-3.0b2/src/amitcp/kern/amiga_main.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_main.c	1994-04-02 13:29:04.000000000 +1000
++++ AmiTCP-3.0b2/src/amitcp/kern/amiga_main.c	2026-03-23 22:35:06.535545100 +1100
+@@ -52,6 +52,8 @@
+ 
+ #include <conf.h>
+ 
++#include <signal.h>		/* must come before AmiTCP sys/time.h redefines tv_sec */
++
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/synch.h>
+@@ -61,13 +63,13 @@
+ #include <sys/socket.h>
+ #include <sys/socketvar.h>
+ 
+-#include <signal.h>		/* from the C compilers includes */
+-
+ #include <kern/amiga_includes.h>
+ 
+-#if __SASC
++#if __SASC || __VBCC__
+ #include <proto/dos.h>
+ #elif __GNUC__
++/* NDK inline dos.h requires DOSBase to be declared in scope */
++extern struct DosLibrary *DOSBase;
+ #include <inline/dos.h>
+ #else
+ #error Compiler not supported!
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_netdb.c AmiTCP-3.0b2/src/amitcp/kern/amiga_netdb.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_netdb.c	2026-03-24 13:21:39.738242900 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/amiga_netdb.c	2026-03-24 13:22:46.034335400 +1100
+@@ -91,7 +91,7 @@
+ #include <dos/dos.h>
+ #include <dos/rdargs.h>
+ 
+-#if __SASC
++#if __SASC || __VBCC__
+ #include <proto/dos.h>
+ #elif __GNUC__
+ #include <inline/dos.h>
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_rexx.c AmiTCP-3.0b2/src/amitcp/kern/amiga_rexx.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/amiga_rexx.c	2026-03-24 13:21:40.109388900 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/amiga_rexx.c	2026-03-24 13:22:46.298119900 +1100
+@@ -81,7 +81,7 @@
+ #include <rexx/storage.h>
+ #include <rexx/rxslib.h>
+ 
+-#if __SASC
++#if __SASC || __VBCC__
+ #include <proto/rexxsyslib.h>
+ #include <proto/utility.h>
+ #elif __GNUC__
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/kern_malloc.c AmiTCP-3.0b2/src/amitcp/kern/kern_malloc.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/kern_malloc.c	2026-03-24 13:21:42.927549400 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/kern_malloc.c	2026-03-24 13:22:48.641314000 +1100
+@@ -39,6 +39,9 @@
+  */
+ 
+ #include <conf.h>
++#ifdef __VBCC__
++#include <stddef.h>
++#endif
+ 
+ #include <sys/param.h>
+ #include <sys/malloc.h>
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/kern/subr_prf.c AmiTCP-3.0b2/src/amitcp/kern/subr_prf.c
+--- AmiTCP-3.0b2.orig/src/amitcp/kern/subr_prf.c	2026-03-24 13:21:43.294671300 +1100
++++ AmiTCP-3.0b2/src/amitcp/kern/subr_prf.c	2026-03-24 13:22:48.991812200 +1100
+@@ -142,7 +142,7 @@
+ 
+ #if __GNUC__
+ #include <inline/intuition.h>
+-#elif __SASC
++#elif __SASC || __VBCC__
+ #include <proto/intuition.h>
+ #endif
+ 
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/net/if.c AmiTCP-3.0b2/src/amitcp/net/if.c
+--- AmiTCP-3.0b2.orig/src/amitcp/net/if.c	2026-03-24 13:22:13.017753100 +1100
++++ AmiTCP-3.0b2/src/amitcp/net/if.c	2026-03-24 13:22:50.727646500 +1100
+@@ -96,8 +96,8 @@
+ int ifconf(int, caddr_t);
+ 
+ /* Compatibility with AmiTCP/IP 2 */
+-#include <sys/a_ioctl.h>
+-#include <net/a_if.h>
++/* #include <sys/a_ioctl.h> */
++/* #include <net/a_if.h> */
+ struct ifnet *aifunit(register char *name);
+ int aifconf(int cmd, caddr_t data);
+ 
+@@ -579,7 +579,7 @@
+ #endif
+ 	}
+ 
+-#ifndef COMPAT_AMITCP2
++#ifdef COMPAT_AMITCP2
+ 	/* Do we have old ioctl? */
+ 	if (IOCGROUP(cmd) == 'I') {
+ 		struct aifreq *aifr;
+@@ -622,7 +622,7 @@
+ 		ifp->if_flags = (ifp->if_flags & IFF_CANTCHANGE) |
+ 			(ifr->ifr_flags &~ IFF_CANTCHANGE);
+ 		if (ifp->if_ioctl)
+-			(void) (*ifp->if_ioctl)(ifp, cmd, data);
++			(void) (((int(*)(struct ifnet *, int, caddr_t))ifp->if_ioctl))(ifp, cmd, data);
+ 		break;
+ 
+ 	case SIOCSIFMETRIC:
+@@ -671,16 +671,16 @@
+ #ifdef AMITCP
+ 		ep = sprint_d(ifp->if_unit, ifr.ifr_name, sizeof(ifr.ifr_name));
+ 		/* Copy the interface name into ifr */
+-		bcopy(ifp->if_name, ifr.ifr_name, ep - ifr.ifr_name);
++		bcopy(ifp->if_name, ifr.ifr_name, ep - (char *)ifr.ifr_name);
+ 		/* Find the end of interface name */
+-		for (cp = ifr.ifr_name; cp < ep && *cp; cp++)
++		for (cp = (char *)ifr.ifr_name; cp < ep && *cp; cp++)
+ 			;
+ 		/* Append unit number to it */
+ 		for (; *cp = *ep; cp++, ep++)
+ 			;
+ #else
+ 		bcopy(ifp->if_name, ifr.ifr_name, sizeof (ifr.ifr_name) - 2);
+-		for (cp = ifr.ifr_name; cp < ep && *cp; cp++)
++		for (cp = (char *)ifr.ifr_name; cp < ep && *cp; cp++)
+ 			;
+ 		*cp++ = '0' + ifp->if_unit; *cp = '\0';
+ #endif
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/net/if_sana.c AmiTCP-3.0b2/src/amitcp/net/if_sana.c
+--- AmiTCP-3.0b2.orig/src/amitcp/net/if_sana.c	2026-03-24 13:22:13.400718200 +1100
++++ AmiTCP-3.0b2/src/amitcp/net/if_sana.c	2026-03-24 13:22:51.840697800 +1100
+@@ -51,6 +51,11 @@
+ #include <sys/synch.h>
+ #include <sys/time.h>
+ 
++#ifdef __GNUC__
++/* NDK inline GetSysTime (= get_time) needs TimerBase in scope */
++extern struct Library *TimerBase;
++#endif
++
+ #include <net/if.h>
+ #include <net/netisr.h>
+ 
+@@ -76,7 +81,7 @@
+ #include <net/sana2request.h>
+ #include <net/sana2errno.h>
+ 
+-#if __SASC
++#if __SASC || __VBCC__
+ #include <proto/dos.h>
+ #elif __GNUC__
+ #include <inline/dos.h>
+@@ -87,8 +92,12 @@
+ /* Correct prototype for the CheckIO.
+  * (The one in clib/exec_protos.h has wrong return value type: BOOL (16 bits) 
+  * instead of a pointer (32 bits)!)
++ * Under GCC, CheckIO is already defined as an inline macro with the correct
++ * return type, so we only declare the prototype for non-GCC compilers.
+  */
++#ifndef CheckIO
+ struct IORequest * CheckIO(struct IORequest *req);
++#endif
+ 
+ #define ARP_MTU (sizeof(struct s2_arppkt))
+ 
+@@ -100,10 +109,9 @@
+ /* queue for sana network interfaces */
+ struct sana_softc *ssq = NULL;
+ 
+-/* These are wire type dependant parameters of 
+- * Sana-II Network Interface
++/* wiretype_table extern removed: struct wiretype_parameters is not defined
++ * in this codebase and the symbol is not referenced in this file.
+  */
+-extern struct wiretype_parameters wiretype_table[];
+ 
+ /* 
+  * Local prototypes
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/net/rtsock.c AmiTCP-3.0b2/src/amitcp/net/rtsock.c
+--- AmiTCP-3.0b2.orig/src/amitcp/net/rtsock.c	2026-03-24 13:22:18.444103800 +1100
++++ AmiTCP-3.0b2/src/amitcp/net/rtsock.c	2026-03-24 13:22:55.278396500 +1100
+@@ -740,7 +740,7 @@
+ 
+ struct protosw routesw[] = {
+ { SOCK_RAW,	&routedomain,	0,		PR_ATOMIC|PR_ADDR,
+-  (void (*)(...))raw_input,	route_output,	raw_ctlinput,	0,
++  (void (*)())raw_input,	route_output,	raw_ctlinput,	0,
+   route_usrreq,
+   raw_init,	0,		0,		        0,
+ }
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/net/sana2arp.c AmiTCP-3.0b2/src/amitcp/net/sana2arp.c
+--- AmiTCP-3.0b2.orig/src/amitcp/net/sana2arp.c	2026-03-24 13:22:18.656799800 +1100
++++ AmiTCP-3.0b2/src/amitcp/net/sana2arp.c	2026-03-24 13:22:55.510508600 +1100
+@@ -27,6 +27,9 @@
+  */
+ 
+ #include <conf.h>
++#ifdef __VBCC__
++#include <stddef.h>
++#endif
+ 
+ #include <sys/param.h>
+ #include <sys/systm.h>
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/net/sana2config.c AmiTCP-3.0b2/src/amitcp/net/sana2config.c
+--- AmiTCP-3.0b2.orig/src/amitcp/net/sana2config.c	2026-03-24 13:22:19.025241600 +1100
++++ AmiTCP-3.0b2/src/amitcp/net/sana2config.c	2026-03-24 13:22:55.867578300 +1100
+@@ -30,9 +30,11 @@
+ #endif
+ 
+ #include <kern/amiga_includes.h>
+-#if __SASC
++#if __SASC || __VBCC__
+ #include <proto/dos.h>
+ #elif __GNUC__
++/* NDK inline dos.h requires DOSBase to be declared in scope */
++extern struct DosLibrary *DOSBase;
+ #include <inline/dos.h>
+ #else
+ #error Your compiler is not supported in this release.
+@@ -42,9 +44,9 @@
+ #include <devices/sana2.h>
+ #include <utility/tagitem.h>
+ #include <net/sana2tags.h>
+-#include <net/sana2config.h>
+ #include <net/if_arp.h>
+ #include <net/if_sana.h>
++#include <net/sana2config.h>
+ 
+ static const char template[] = SSC_TEMPLATE;
+ 
+@@ -156,7 +158,7 @@
+ 
+   if (how == SSC_ALIAS) {
+     /* Copy the interface name */
+-    cp = strncpy(devname, unitname, IFNAMSIZ); 
++    cp = (char *)strncpy(devname, unitname, IFNAMSIZ); 
+     devname[IFNAMSIZ-1] = '\0';
+   
+     for (; *cp; cp++)
+@@ -211,7 +213,7 @@
+ 	  if (strcmp(FilePart(s->args->a_dev), FilePart(unitname)) == 0 &&
+ 	      (s->args->a_unit == NULL || *s->args->a_unit == unit)) {
+ 	    /* Copy the devname */
+-	    cp = strncpy(devname,  s->args->a_name, IFNAMSIZ); 
++	    cp = (char *)strncpy(devname,  s->args->a_name, IFNAMSIZ); 
+ 	    devname[IFNAMSIZ-1] = '\0';
+   
+ 	    for (; *cp; cp++)
+@@ -395,9 +397,9 @@
+     ifp->ss_cflags &= ~(SSF_TRACK);
+ 
+   /* Set up name */
+-  ifp->ss_if.if_name = strcpy(ifp->ss_name, ifc->name);
++  ifp->ss_if.if_name = (char *)strcpy((char *)ifp->ss_name, ifc->name);
+   ifp->ss_if.if_unit = ifc->unit;
+-  ifp->ss_execname = strcpy((char *)(ifp + 1), ifc->args->a_dev);
++  ifp->ss_execname = (UBYTE *)strcpy((char *)(ifp + 1), ifc->args->a_dev);
+   ifp->ss_execunit = *ifc->args->a_unit;
+ }
+ 
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/netinet/in_cksum.asm AmiTCP-3.0b2/src/amitcp/netinet/in_cksum.asm
+--- AmiTCP-3.0b2.orig/src/amitcp/netinet/in_cksum.asm	2026-03-24 13:21:52.219229900 +1100
++++ AmiTCP-3.0b2/src/amitcp/netinet/in_cksum.asm	2026-03-24 13:22:58.487395500 +1100
+@@ -24,7 +24,7 @@
+ 
+ 	INCLUDE   "sys/mbuf.i"
+ 
+-	XREF	_printf
++* xref removed
+ 	XDEF	_in_cksum
+ 	XDEF	@in_cksum
+ 
+@@ -134,7 +134,7 @@
+ 		addx.l	d1,sum
+ 		move.l	(w)+,d1
+ 		addx.l	d1,sum
+-loop32test:	dbf.s	d0,loop32
++loop32test:	dbf	d0,loop32
+ 		moveq	#31,d0
+ 		and.l	mlen,d0
+ 		ror.l	#2,d0
+@@ -184,7 +184,7 @@
+ return:		tst.l	len
+ 		beq.s	reduce
+ 		pea	out_of_data(pc)
+-		jsr	_printf(pc)
++* printf removed
+ 		addq.l	#4,sp
+ *
+ * Reduce
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/amitcp/sys/protosw.h AmiTCP-3.0b2/src/amitcp/sys/protosw.h
+--- AmiTCP-3.0b2.orig/src/amitcp/sys/protosw.h
++++ AmiTCP-3.0b2/src/amitcp/sys/protosw.h
+@@ -102,8 +102,8 @@
+ 	short	pr_protocol;		/* protocol number */
+ 	short	pr_flags;		/* see below */
+ /* protocol-protocol hooks */
+-	void	(* STKARGFUN pr_input)(...);		/* input to protocol (from below) */
+-	int	(* STKARGFUN pr_output)(...);		/* output to protocol (from above) */
++	void	(* STKARGFUN pr_input)();		/* input to protocol (from below) */
++	int	(* STKARGFUN pr_output)();		/* output to protocol (from above) */
+ 	void	(*pr_ctlinput)(int cmd,	/* control input (from below) */
+ 			       struct sockaddr *sa, void *arg);
+ 	int	(*pr_ctloutput)(int req, /* control output (from above) */
+diff -urN '--exclude=*.o' '--exclude=*.lib' '--exclude=bsdsocket.library' '--exclude=config_var.d' '--exclude=config_var.c' '--exclude=depend' '--exclude=*.exe' '--exclude=*.md' '--exclude=*.ps1' '--exclude=.vscode' '--exclude=*.lha' AmiTCP-3.0b2.orig/src/build_vbcc.sh AmiTCP-3.0b2/src/build_vbcc.sh
+--- AmiTCP-3.0b2.orig/src/build_vbcc.sh
++++ AmiTCP-3.0b2/src/build_vbcc.sh
+@@ -0,0 +1,159 @@
++#!/usr/bin/env bash
++# build_vbcc.sh - Build AmiTCP-3.0b2 amitcp/ using VBCC m68k cross-compiler
++# Run from WSL inside the src/ directory: bash build_vbcc.sh
++
++set -e
++
++VBCC_BIN="/mnt/s/Amiga/vbcc/bin"
++VC="$VBCC_BIN/vc.exe"
++VBCC_CONFIG="S:/Amiga/vbcc/config/aos68k_wsl"
++
++# Derive paths from this script's location so the build works from any directory
++SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
++BASE_DIR="$(dirname "$SRC_DIR")"
++
++# Convert a Linux /mnt/x/... path to a Windows X:/... path for vc.exe
++to_win() { echo "$1" | sed 's|^/mnt/\([a-zA-Z]\)/|\U\1:/|'; }
++
++BUILD_DIR="$BASE_DIR/build_vbcc"
++W_SRC="$(to_win "$SRC_DIR")"
++W_BUILD="$(to_win "$BUILD_DIR")"
++
++CFLAGS=(
++  "+$VBCC_CONFIG"
++  "-O1"
++  "-size"
++  "-DAMITCP"
++  "-DKERNEL"
++  "-DDIRECTED_BROADCAST"
++  "-DRCS_ID_C="
++  "-Dstrcasecmp=stricmp"
++  "-I$W_SRC/netinclude"
++  "-I$W_SRC/amitcp"
++  "-I$W_SRC/amitcp/conf"
++  "-I$W_SRC/amitcp/protos"
++)
++
++mkdir -p "$BUILD_DIR"
++mkdir -p "$BUILD_DIR/kern"
++mkdir -p "$BUILD_DIR/net"
++mkdir -p "$BUILD_DIR/netinet"
++mkdir -p "$BUILD_DIR/api"
++
++ERRORS=0
++COMPILED=0
++
++compile_file() {
++  local srcrel="$1"           # e.g. amitcp/kern/amiga_main.c
++  local objrel="${srcrel%.c}.o"  # e.g. amitcp/kern/amiga_main.o
++  local subdir
++  subdir="$(dirname "$srcrel" | sed 's|amitcp/||')"  # kern, net, netinet, api
++
++  local w_src="$W_SRC/$srcrel"
++  local w_obj="$W_BUILD/${subdir}/$(basename "${srcrel%.c}.o")"
++  local l_obj="$BUILD_DIR/${subdir}/$(basename "${srcrel%.c}.o")"
++
++  printf "  %-42s ... " "$srcrel"
++  if "$VC" "${CFLAGS[@]}" -c "$w_src" -o "$w_obj" 2>"$l_obj.log"; then
++    echo "OK"
++    ((COMPILED++)) || true
++  else
++    echo "FAIL  (see ${l_obj}.log)"
++    ((ERRORS++)) || true
++  fi
++}
++
++echo "=== Building kern/ ==="
++for f in \
++  amitcp/kern/amiga_main.c   amitcp/kern/amiga_time.c   amitcp/kern/amiga_config.c \
++  amitcp/kern/amiga_netdb.c  \
++  amitcp/kern/kern_synch.c   amitcp/kern/kern_malloc.c  amitcp/kern/uipc_mbuf.c \
++  amitcp/kern/uipc_domain.c  amitcp/kern/uipc_socket.c  amitcp/kern/uipc_socket2.c \
++  amitcp/kern/amiga_log.c    amitcp/kern/amiga_cstat.c  amitcp/kern/amiga_rexx.c \
++  amitcp/kern/subr_prf.c     amitcp/kern/accesscontrol.c amitcp/kern/config_var.c
++do
++  compile_file "$f"
++done
++
++echo ""
++echo "=== Building net/ ==="
++for f in \
++  amitcp/net/if.c           amitcp/net/if_loop.c \
++  amitcp/net/raw_cb.c       amitcp/net/raw_usrreq.c \
++  amitcp/net/route.c        amitcp/net/rtsock.c        amitcp/net/radix.c \
++  amitcp/net/if_sana.c      amitcp/net/netisr.c        amitcp/net/sana2config.c \
++  amitcp/net/sana2copybuff.c amitcp/net/sana2arp.c     amitcp/net/sana2perror.c
++do
++  compile_file "$f"
++done
++
++echo ""
++echo "=== Building netinet/ ==="
++for f in \
++  amitcp/netinet/in.c          amitcp/netinet/in_pcb.c     amitcp/netinet/in_proto.c \
++  amitcp/netinet/ip_icmp.c     amitcp/netinet/ip_input.c   amitcp/netinet/ip_output.c \
++  amitcp/netinet/raw_ip.c      amitcp/netinet/tcp_debug.c  amitcp/netinet/tcp_input.c \
++  amitcp/netinet/tcp_output.c  amitcp/netinet/tcp_subr.c   amitcp/netinet/tcp_timer.c \
++  amitcp/netinet/tcp_usrreq.c  amitcp/netinet/udp_usrreq.c
++do
++  compile_file "$f"
++done
++# Note: in_cksum.c excluded - uses asm (in_cksum.asm handles it)
++
++echo ""
++echo "=== Assembling netinet/in_cksum.asm ==="
++printf "  %-42s ... " "amitcp/netinet/in_cksum.asm"
++if /mnt/s/Amiga/vbcc/bin/vasmm68k_mot.exe -m68000 -I"$W_SRC/netinclude" -I"$W_SRC/amitcp" -I"S:/Amiga/vbcc/NDK_3.9/Include/include_i" -Fhunk -o "$W_BUILD/netinet/in_cksum.o" "$W_SRC/amitcp/netinet/in_cksum.asm" > "$BUILD_DIR/netinet/in_cksum.log" 2>&1; then
++  echo "OK"
++  ((COMPILED++)) || true
++else
++  echo "FAIL  (see $BUILD_DIR/netinet/in_cksum.log)"
++  ((ERRORS++)) || true
++fi
++
++echo ""
++echo "=== Building api/ ==="
++for f in \
++  amitcp/api/amiga_api.c       amitcp/api/amiga_libtables.c  amitcp/api/amiga_syscalls.c \
++  amitcp/api/amiga_sendrecv.c  amitcp/api/amiga_generic.c    amitcp/api/amiga_generic2.c \
++  amitcp/api/amiga_libcalls.c  amitcp/api/amiga_errlists.c   \
++  amitcp/api/getxbyy.c         amitcp/api/gethostnamadr.c    amitcp/api/allocdatabuffer.c \
++  amitcp/api/res_comp.c        amitcp/api/res_debug.c        amitcp/api/res_init.c \
++  amitcp/api/res_mkquery.c     amitcp/api/res_query.c        amitcp/api/res_send.c  \
++  amitcp/api/auto_extras.c     amitcp/api/auto_inetaddr.c    amitcp/api/auto_netdb.c \
++  amitcp/api/auto_nonsocket.c  amitcp/api/auto_protocols.c   amitcp/api/auto_socket.c
++do
++  compile_file "$f"
++done
++
++echo ""
++echo "=== Summary ==="
++echo "  Compiled OK : $COMPILED"
++echo "  Errors      : $ERRORS"
++echo ""
++
++if [ "$ERRORS" -eq 0 ]; then
++  echo "=== Linking AmiTCP ==="
++  # Find all .o files and convert them to Windows paths for vc.exe
++  O_FILES=$(find "$BUILD_DIR" -name "*.o" | while read -r f; do to_win "$f"; done | tr '\n' ' ')
++  W_AMIGALIB="$(to_win "$VBCC_BIN/../targets/m68k-amigaos/lib/amiga.lib")"
++
++  if "$VC" "+$VBCC_CONFIG" -o "$W_BUILD/AmiTCP" $O_FILES "$W_AMIGALIB" > "$BUILD_DIR/link.log" 2>&1; then
++    echo "Linking SUCCESS: $W_BUILD/AmiTCP"
++  else
++    echo "Linking FAIL  (see $BUILD_DIR/link.log)"
++    ((ERRORS++)) || true
++  fi
++fi
++
++if [ "$ERRORS" -eq 0 ]; then
++  echo "All files compiled and linked successfully!"
++else
++  echo "Build failed. Check *.log files under $BUILD_DIR/"
++  echo "Quick error summary:"
++  find "$BUILD_DIR" -name "*.log" -size +0 | while read -r logfile; do
++    echo ""
++    echo "--- $logfile ---"
++    grep -i "error" "$logfile" | head -5
++  done
++fi
