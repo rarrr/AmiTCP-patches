@@ -4,7 +4,7 @@ This repository contains patches to make AmiTCP compile with the VBCC compiler a
 
 ## Patches
 
-- **`AmiTCP-VBCC-full.patch`** - Modifies the AmiTCP source to compile using the VBCC compiler.
+- **`AmiTCP-VBCC.patch`** - Modifies the AmiTCP source to compile using the VBCC compiler.
 - **`AmiTCP-optimisations.patch`** - Optimisations to the core source code for improved performance on 68k Amiga architectures.
 
 ## Usage
@@ -15,7 +15,7 @@ You will need the following archive files and patch files in the same working di
 
 - `AmiTCP-src-30b2.lha`
 - `AmiTCP-api-30b2.lha`
-- `AmiTCP-VBCC-full.patch`
+- `AmiTCP-VBCC.patch`
 - `AmiTCP-optimisations.patch`
 
 ### Steps
