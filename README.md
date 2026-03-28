@@ -4,8 +4,8 @@ This repository contains patches to make [AmiTCP](https://github.com/mheeres/Ami
 
 ## Patches
 
-- **`AmiTCP-VBCC-full.patch`** — Modifies the AmiTCP source to compile using the VBCC compiler.
-- **`AmiTCP-optimisations.patch`** — Optimisations to the core source code for improved performance on 68k Amiga architectures.
+- **`AmiTCP-VBCC-full.patch`** - Modifies the AmiTCP source to compile using the VBCC compiler.
+- **`AmiTCP-optimisations.patch`** - Optimisations to the core source code for improved performance on 68k Amiga architectures.
 
 ## Usage
 
